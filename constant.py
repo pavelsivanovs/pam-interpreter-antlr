@@ -1,2 +1,2 @@
-INPUT = 'input.txt'
-DATA = 'data.txt'
+INPUT = 'samples/input3.txt'
+DATA = 'samples/data3.txt'

@@ -1,1 +1,9 @@
-7,5,3,2
+read x, y; 
+read i, j; 
+
+if x < y and i > j then 
+    write x; 
+    if not y < i then 
+        write y 
+    fi 
+else write y fi

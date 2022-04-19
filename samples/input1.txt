@@ -1,1 +1,6 @@
-14,35
+read x,y; 
+while x <> y do 
+    if x=<y then y:=y-x else x:=x-y fi 
+end; 
+write x; 
+write y

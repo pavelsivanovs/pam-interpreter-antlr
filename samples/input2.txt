@@ -1,1 +1,9 @@
-5,6,7,10,12,0
+n:= 0; 
+sum:=0; 
+read a; 
+while a > 0 do 
+  n:=n+1; 
+  sum:=sum+a; 
+  read a 
+end; 
+write n, sum
