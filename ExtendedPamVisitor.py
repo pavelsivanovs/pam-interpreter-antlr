@@ -13,7 +13,7 @@ class ExtendedPamVisitor(PamVisitor):
         '-': operator.sub,
         '*': operator.mul,
         '/': operator.truediv,
-        '<>': operator.neg,
+        '<>': operator.ne,
         '=<': operator.le,
         '>=': operator.ge,
         '=': operator.eq,
@@ -33,7 +33,7 @@ class ExtendedPamVisitor(PamVisitor):
             for datum in data:
                 self.input_data.append(int(datum))
         else:
-            raise Exception('Empty data file! Please check the contents of: ', constant.DATA)
+            raise Exception(f"Empty data file! Please check the contents of: {constant.DATA}")
 
     # Visit a parse tree produced by PamParser#input_stmt.
     # input_stmt : 'read' varlist;
@@ -49,22 +49,20 @@ class ExtendedPamVisitor(PamVisitor):
         varlist = self.visitChildren(ctx)
 
         for variable in varlist:
-            print(variable, ': ', str(self.variables.get(variable)))
+            print(f"{variable}: {str(self.variables.get(variable))}")
 
     # Visit a parse tree produced by PamParser#assign_stmt.
     # assign_stmt : VARNAME ':=' (expr | logical_expr);
     def visitAssign_stmt(self, ctx: PamParser.Assign_stmtContext):
-        # TODO check types
-        varname = ctx.VARNAME()
+        varname = str(ctx.VARNAME())
         value = self.visit(ctx.getChild(2))
 
-        # print(varname, value)
         self.variables[varname] = value
 
     # Visit a parse tree produced by PamParser#cond_stmt.
     # cond_stmt : 'if' (logical_expr) 'then' series ('else' series)? 'fi';
     def visitCond_stmt(self, ctx: PamParser.Cond_stmtContext):
-        logical_expr_cond = ctx.logical_expr()
+        logical_expr_cond = self.visit(ctx.logical_expr())
 
         if logical_expr_cond:
             return self.visit(ctx.series(0))
@@ -85,38 +83,104 @@ class ExtendedPamVisitor(PamVisitor):
             return self.visitChildren(ctx)
 
         expr_left = self.visit(ctx.getChild(0))
+
+        # Optimization
+        # If it is already known that the left part of the disjunction is true
+        # then there is no need in evaluating the right part of the expression
+        if expr_left:
+            return expr_left
+
         expr_right = self.visit(ctx.getChild(2))
 
-        return expr_left or expr_right
+        return self.operators[str(ctx.DISJ())](expr_left, expr_right)
 
     # Visit a parse tree produced by PamParser#logical_term.
+    # logical_term : logical_term CONJ logical_neg_elem | logical_neg_elem;
     def visitLogical_term(self, ctx: PamParser.Logical_termContext):
-        return self.visitChildren(ctx)
+        if ctx.getChildCount() == 1:
+            return self.visitChildren(ctx)
+
+        expr_left = self.visit(ctx.logical_term())
+
+        # Optimization
+        # If it is already known that the left part of the conjunction is false
+        # then there is no need in evaluating the right part of the expression
+        if not expr_left:
+            return expr_left
+
+        expr_right = self.visit(ctx.logical_neg_elem())
+
+        return self.operators[str(ctx.CONJ())](expr_left, expr_right)
 
     # Visit a parse tree produced by PamParser#logical_neg_elem.
+    # logical_neg_elem : NEG logical_elem | logical_elem;
     def visitLogical_neg_elem(self, ctx: PamParser.Logical_neg_elemContext):
-        return self.visitChildren(ctx)
+        elem = self.visit(ctx.logical_elem())
+
+        return self.operators[str(ctx.NEG())](elem) if ctx.NEG() else elem
 
     # Visit a parse tree produced by PamParser#logical_elem.
+    # logical_elem : '('logical_expr')' | BOOL | compar | VARNAME;
     def visitLogical_elem(self, ctx: PamParser.Logical_elemContext):
-        return self.visitChildren(ctx)
+        if ctx.logical_expr():
+            return self.visit(ctx.logical_expr())
+
+        if ctx.compar():
+            return self.visit(ctx.compar())
+
+        if ctx.VARNAME():
+            return self.variables.get(ctx.VARNAME().text)
+
+        if ctx.BOOL():
+            return True if ctx.BOOL().text == 'TRUE' else False
 
     # Visit a parse tree produced by PamParser#compar.
+    # compar : expr RELATION expr;
     def visitCompar(self, ctx: PamParser.ComparContext):
-        return self.visitChildren(ctx)
+        elem_left = self.visit(ctx.expr(0))
+        elem_right = self.visit(ctx.expr(1))
+
+        return self.operators[str(ctx.getChild(1))](elem_left, elem_right)
 
     # Visit a parse tree produced by PamParser#varlist.
+    # varlist : VARNAME (',' VARNAME)*;
     def visitVarlist(self, ctx: PamParser.VarlistContext):
-        return self.visitChildren(ctx)
+        varlist = []
+
+        for i in range(0, ctx.getChildCount(), 2):
+            varlist.append(str(ctx.getChild(i)))
+        return varlist
 
     # Visit a parse tree produced by PamParser#expr.
+    # expr : term (WEAKOP term)*;
     def visitExpr(self, ctx: PamParser.ExprContext):
-        return self.visitChildren(ctx)
+        if ctx.getChildCount() == 1:
+            return self.visitChildren(ctx)
+
+        elem_left = self.visit(ctx.getChild(0))
+        elem_right = self.visit(ctx.getChild(2))
+
+        return round(self.operators[str(ctx.getChild(1))](elem_left, elem_right))
 
     # Visit a parse tree produced by PamParser#term.
+    # term : elem (STRONGOP elem)*;
     def visitTerm(self, ctx: PamParser.TermContext):
-        return self.visitChildren(ctx)
+        if ctx.getChildCount() == 1:
+            return self.visitChildren(ctx)
+
+        elem_left = self.visit(ctx.getChild(0))
+        elem_right = self.visit(ctx.getChild(2))
+
+        return self.operators[str(ctx.getChild(1))](elem_left, elem_right)
 
     # Visit a parse tree produced by PamParser#elem.
+    # elem : NUMBER | VARNAME | '(' expr ')';
     def visitElem(self, ctx: PamParser.ElemContext):
-        return self.visitChildren(ctx)
+        if ctx.expr():
+            return self.visit(ctx.expr())
+
+        elem = str(ctx.getChild(0))
+
+        if elem.isnumeric():
+            return int(elem)
+        return self.variables.get(elem)

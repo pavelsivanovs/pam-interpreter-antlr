@@ -17,9 +17,9 @@ def main(filename):
     visitor = ExtendedPamVisitor()
     visitor.visit(tree)
 
-    tree_string = Trees.toStringTree(tree, None, parser)
-    tree = nltk.Tree.fromstring(tree_string)
-    tree.draw()
+    # tree_string = Trees.toStringTree(tree, None, parser)
+    # tree = nltk.Tree.fromstring(tree_string)
+    # tree.draw()
 
 
 if __name__ == '__main__':
